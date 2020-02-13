@@ -1,26 +1,13 @@
 #include <DFRobotDFPlayerMini.h>
-
-
 #include <LiquidCrystal.h>
-
 #include <Keypad.h>
-
-///              MP3 PLAYER PROJECT
-/// http://educ8s.tv/arduino-mp3-player/
-//////////////////////////////////////////
-
-
 #include "SoftwareSerial.h"
-SoftwareSerial mySerial(10, 11);
-# define Start_Byte 0x7E
-# define Version_Byte 0xFF
-# define Command_Length 0x06
-# define End_Byte 0xEF
-# define Acknowledge 0x00 //Returns info with command 0x41 [0x01: info, 0x00: no info]
-
-# define ACTIVATED LOW
 
 void printDetail(uint8_t type, int value);
+
+SoftwareSerial mySerial(10, 11);
+
+const int interrupt0 = 0; 
 
 boolean isPlaying = false;
 
@@ -31,20 +18,12 @@ int CLK = 2;//CLK->D2
 int DT = 3;//DT->D3 
 int SW = 4;//SW->D4 
 
-const int interrupt0 = 0; 
-
 int lastCLK = 0; 
 
-const int DRAC_SOUND = 1;
-const int SCREAM_SOUND = 2;
-const int GHOST_SOUND = 3;
-const int WOLF_SOUND = 4;
-const int LAZER_SOUND = 5;
-const int TARDIS_SOUND = 6;
-const int HEHEHE_SOUND = 7;
-const int SCARYHOUSE_SOUND = 8;
-const int SHOTGUN_SOUND = 9;
-
+int number_folders = 1;
+int current_folder = 1;
+int current_song = 1;
+int current_folder_count = 1;
 
 const byte ROWS = 4; //four rows
 const byte COLS = 4; //four columns
@@ -81,19 +60,19 @@ void setup () {
   isPlaying = true;
   myDFPlayer.begin(mySerial);
   delay(1000);
+  number_folders = myDFPlayer.readFolderCounts() - 1;
   Serial.print("Folder Counts:");
   Serial.println(myDFPlayer.readFolderCounts());
   Serial.print("File Coutns in Folder 1:");
-  Serial.println(myDFPlayer.readFileCountsInFolder(1));
+  current_folder_count = myDFPlayer.readFileCountsInFolder(1);
+  Serial.println(current_folder_count);
   Serial.print("File Counts:");
   Serial.println(myDFPlayer.readFileCounts());
   myDFPlayer.setTimeOut(500);
   myDFPlayer.volume(currVolume);
   delay(300);
-  myDFPlayer.loopFolder(1);
-  delay(100);
-  myDFPlayer.start();
-
+  randomSeed(analogRead(0));
+  randomize_folder();
 }
 
 int digit_to_int(char d)
@@ -123,13 +102,13 @@ void loop () {
     delay(100);
   }
   if (!digitalRead(SW)) {
-    Serial.print("Pause");
+    Serial.println("Pause");
     if(isPlaying) {
       myDFPlayer.pause();
       isPlaying = false;
     } else {
       isPlaying = true;
-      myDFPlayer.play();
+      myDFPlayer.start();
     }
     delay(600);
   }
@@ -147,29 +126,94 @@ void loop () {
       isPlaying = false;
     } else {
       isPlaying = true;
-      myDFPlayer.play();
+      myDFPlayer.start();
     }
   }
 
 
   if (customKey == 'B') {
     if(isPlaying) {
-      myDFPlayer.previous();
+      prev_song();
+      //myDFPlayer.previous();
     }
   }
  
   if (customKey == 'C') {
     if(isPlaying) {
-      myDFPlayer.next();
+      next_song();
+      //myDFPlayer.next();
+    }
+  }
+
+  if (customKey == 'D') {
+    if (number_folders > 1) {
+      current_folder++;
+      if (current_folder >= number_folders) {
+        current_folder = 1;
+      }
+      randomize_folder();
     }
   }
 
   if (myDFPlayer.available()) {
-    printDetail(myDFPlayer.readType(), myDFPlayer.read()); //Print the detail message from DFPlayer to handle different errors and states.
+    myDFPlayer.read();
+    uint8_t type = myDFPlayer.readType();
+    int value = myDFPlayer.read();
+    if (isPlaying && type == DFPlayerPlayFinished) {
+      next_random();
+    }
+    printDetail(type, value); //Print the detail message from DFPlayer to handle different errors and states.
   }
 
 }
 
+void prev_song() {
+  current_song--;
+  if (current_song == 0) {
+    current_song = current_folder_count;
+  }
+  Serial.print("Playing Folder: ");
+  Serial.print(current_folder);
+  Serial.print(" Playing Song: ");
+  Serial.println(current_song);
+  myDFPlayer.playFolder(current_folder, current_song);
+  isPlaying = true;  
+}
+
+void next_song() {
+  current_song++;
+  if (current_song > current_folder_count) {
+    current_song = 1;
+  }
+  Serial.print("Playing Folder: ");
+  Serial.print(current_folder);
+  Serial.print(" Playing Song: ");
+  Serial.println(current_song);
+  myDFPlayer.playFolder(current_folder, current_song);
+  isPlaying = true;  
+}
+
+void next_random() {
+  current_song = random(current_folder_count) + 1;
+  Serial.print("Playing Folder: ");
+  Serial.print(current_folder);
+  Serial.print(" Playing Song: ");
+  Serial.println(current_song);
+  myDFPlayer.playFolder(current_folder, current_song);
+  isPlaying = true;
+}
+
+void randomize_folder() {
+  current_folder_count = myDFPlayer.readFileCountsInFolder(current_folder);
+  delay(100);
+  current_song = random(current_folder_count) + 1;
+  Serial.print("Playing Folder: ");
+  Serial.print(current_folder);
+  Serial.print(" Playing Song: ");
+  Serial.println(current_song);
+  myDFPlayer.playFolder(current_folder, current_song);
+  isPlaying = true;
+}
 
 void ClockChanged() { 
   //Read the CLK pin level 
